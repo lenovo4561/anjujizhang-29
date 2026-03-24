@@ -1,0 +1,352 @@
+<template>
+  <div class="splash-container">
+    <image class="bg-img" src="../../assets/img/loading-bg.png"></image>
+
+    <image class="center-logo" src="../../assets/img/logo.png"></image>
+
+    <image class="bottom-cartoon" src="../../assets/img/loadingBottom.png"></image>
+
+    <div class="modal-overlay" if="{{showModal}}">
+      <div class="modal-content">
+        <text class="modal-title">用户协议及隐私政策</text>
+        <div class="modal-text-wrapper">
+          <text class="modal-text">
+            <span>尊敬的用户：欢迎使用"安聚记账"，在使用前请仔细阅读</span>
+            <a class="link" onclick="openPrivacy">《隐私政策》</a>
+            <span>及</span>
+            <a class="link" onclick="openAgreement">《用户协议》</a>
+            <span>，我们将严格遵守您同意的各项条款使用您的信息，以便为您提供更好的服务。点击"同意并继续"意味着您已阅读并同意上述协议内容。</span>
+          </text>
+        </div>
+        <div class="modal-buttons">
+          <div class="btn-primary" onclick="handleAgree">
+            <text class="btn-text-primary">同意并继续</text>
+          </div>
+          <div class="btn-secondary" onclick="handleDisagree">
+            <text class="btn-text-secondary">不同意</text>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import router from '@system.router'
+import storage from '@system.storage'
+import app from '@system.app'
+import device from '@system.device'
+import prompt from '@system.prompt'
+
+export default {
+  private: {
+    timer: null,
+    showModal: false,
+    hasInitUser: false
+  },
+
+  onInit() {
+    this.checkPrivacyAgreement()
+  },
+
+  checkPrivacyAgreement() {
+    storage.get({
+      key: 'hasAgreedPrivacy',
+      success: (data) => {
+        const value = data && data.data !== undefined ? data.data : data
+        if (value === 'true') {
+          if (!this.hasInitUser) {
+            this.initUser()
+          }
+          this.startTimer()
+        } else {
+          this.showModal = true
+        }
+      },
+      fail: () => {
+        this.showModal = true
+      }
+    })
+  },
+
+  startTimer() {
+    this.timer = setTimeout(() => {
+      this.navigateToHome()
+    }, 2000)
+  },
+
+  handleAgree() {
+    storage.set({
+      key: 'hasAgreedPrivacy',
+      value: 'true',
+      success: () => {
+        this.showModal = false
+        if (!this.hasInitUser) {
+          this.initUser()
+        }
+        this.navigateToHome()
+      },
+      fail: () => {
+        this.showModal = false
+        if (!this.hasInitUser) {
+          this.initUser()
+        }
+        this.navigateToHome()
+      }
+    })
+  },
+
+  handleDisagree() {
+    prompt.showToast({
+      message: '感谢您的使用，应用即将退出'
+    })
+    setTimeout(() => {
+      app.exit()
+    }, 1200)
+  },
+
+  openPrivacy() {
+    router.push({
+      uri: '/pages/Webview',
+      params: {
+        url: 'https://api.51dsp.cn/index/privacy.do?pn=com.anjuhuizd.clxnbill',
+        title: '隐私政策'
+      }
+    })
+  },
+
+  openAgreement() {
+    router.push({
+      uri: '/pages/Webview',
+      params: {
+        url: 'https://api.51dsp.cn/index/agreement.do?pn=com.anjuhuizd.clxnbill',
+        title: '用户协议'
+      }
+    })
+  },
+
+  onHide() {
+    if (this.timer) {
+      clearTimeout(this.timer)
+      this.timer = null
+    }
+  },
+
+  onDestroy() {
+    if (this.timer) {
+      clearTimeout(this.timer)
+      this.timer = null
+    }
+  },
+
+  navigateToHome() {
+    router.replace({
+      uri: '/pages/Demo'
+    })
+  },
+
+  initUser() {
+    this.hasInitUser = true
+
+    Promise.all([
+      new Promise((resolve) => {
+        if (device.getOAID) {
+          device.getOAID({
+            success: (data) => {
+              resolve(data && data.oaid ? data.oaid : '')
+            },
+            fail: () => {
+              resolve('')
+            }
+          })
+        } else {
+          resolve('')
+        }
+      }),
+      new Promise((resolve) => {
+        if (device.getUserId) {
+          device.getUserId({
+            success: (data) => {
+              resolve(data && data.userId ? data.userId : '')
+            },
+            fail: () => {
+              resolve('')
+            }
+          })
+        } else if (device.getId) {
+          device.getId({
+            type: ['user'],
+            success: (data) => {
+              resolve(data && data.user ? data.user : '')
+            },
+            fail: () => {
+              resolve('')
+            }
+          })
+        } else {
+          resolve('')
+        }
+      }),
+      new Promise((resolve) => {
+        if (device.getInfo) {
+          device.getInfo({
+            success: (data) => {
+              resolve(data || {})
+            },
+            fail: () => {
+              resolve({})
+            }
+          })
+        } else {
+          resolve({})
+        }
+      })
+    ]).then((results) => {
+      const oaid = results[0]
+      const androidId = results[1]
+      const deviceInfo = results[2]
+      const appInfo = app.getInfo ? app.getInfo() : {}
+
+      const params = {
+        oaid: oaid,
+        android: androidId,
+        model: deviceInfo.model || '',
+        brand: deviceInfo.brand || '',
+        pn: appInfo.packageName || '',
+        app_version: appInfo.versionName || '',
+        os_version: deviceInfo.osVersionName || '',
+        qudao: 'vivo'
+      }
+
+      $apis.user
+        .init(params)
+        .then((data) => {
+          if (data && data.user_token) {
+            storage.set({
+              key: 'user_token',
+              value: data.user_token
+            })
+          }
+        })
+        .catch((err) => {
+          console.error('User init failed:', err)
+        })
+    })
+  }
+}
+</script>
+
+<style>
+.splash-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  justify-content: center;
+  align-items: center;
+}
+
+.bg-img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.center-logo {
+  width: 92px;
+  height: 92px;
+  z-index: 2;
+  object-fit: contain;
+  margin-bottom: 190px;
+}
+
+.bottom-cartoon {
+  position: fixed;
+  left: 0;
+  bottom: 20px;
+  width: 100%;
+  height: 200px;
+  z-index: 1;
+  object-fit: contain;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  justify-content: center;
+  align-items: center;
+  z-index: 10;
+}
+
+.modal-content {
+  width: 210px;
+  background-color: #ffffff;
+  border-radius: 9px;
+  padding: 16px;
+  flex-direction: column;
+  align-items: center;
+}
+
+.modal-title {
+  font-size: 13px;
+  font-weight: bold;
+  color: #333333;
+  margin-bottom: 10px;
+}
+
+.modal-text-wrapper {
+  margin-bottom: 16px;
+}
+
+.modal-text {
+  font-size: 10px;
+  color: #666666;
+  line-height: 15px;
+}
+
+.link {
+  color: #4a90e2;
+  text-decoration: underline;
+}
+
+.modal-buttons {
+  width: 100%;
+  flex-direction: column;
+}
+
+.btn-primary {
+  width: 100%;
+  height: 29px;
+  border-radius: 14px;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 8px;
+  background-color: #4a90e2;
+}
+
+.btn-text-primary {
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.btn-secondary {
+  width: 100%;
+  height: 29px;
+  border-radius: 14px;
+  justify-content: center;
+  align-items: center;
+  background-color: #f5f7fa;
+}
+
+.btn-text-secondary {
+  color: #4a90e2;
+  font-size: 11px;
+  font-weight: bold;
+}
+</style>

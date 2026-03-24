@@ -1,0 +1,386 @@
+<template>
+  <div class="page">
+    <div class="header-section">
+      <image class="header-bg" src="../../assets/img/zhangdnaxiangq-bg.png"></image>
+      
+      <div class="back-box" onclick="goBack">
+        <image class="back-icon" src="../../assets/img/back.png"></image>
+      </div>
+    </div>
+
+    <div class="content-wrapper">
+      <div class="receipt-card">
+        <image class="receipt-bg" src="../../assets/img/bg.png"></image>
+        
+        <div class="receipt-content">
+          <div class="receipt-header">
+            <image class="category-icon header-category-icon" src="{{record.categoryIcon || '../../assets/img/zhihcu_icon/qita-2.png'}}"></image>
+            <div class="amount-row">
+              <text class="amount-symbol">¥</text>
+              <text class="amount-value">{{record.amount}}</text>
+              <text class="type-tag {{record.type === 'income' ? 'income-tag' : 'expense-tag'}}">{{record.type === 'income' ? '收入' : '支出'}}</text>
+            </div>
+          </div>
+
+          <div class="divider-dashed"></div>
+
+          <div class="info-list">
+            <div class="info-item">
+              <text class="info-label">类型</text>
+              <text class="info-value">{{record.category || '其他'}}</text>
+            </div>
+            <div class="info-item">
+              <text class="info-label">日期</text>
+              <text class="info-value">{{record.dateStr}}</text>
+            </div>
+            <div class="info-item">
+              <text class="info-label">时间</text>
+              <text class="info-value">{{record.timeStr}}</text>
+            </div>
+            <div class="info-item">
+              <text class="info-label">备注</text>
+              <text class="info-value">{{record.note || '无'}}</text>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <div class="delete-btn" onclick="deleteRecord">
+        <text class="delete-text">删除</text>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import router from '@system.router'
+import prompt from '@system.prompt'
+import storage from '@system.storage'
+
+export default {
+  protected: {
+    recordStr: ''
+  },
+  private: {
+    record: {
+      categoryIcon: '',
+      category: '',
+      amount: '',
+      type: '',
+      dateStr: '',
+      timeStr: '',
+      note: '',
+      date: 0
+    }
+  },
+  onInit() {
+    if (this.recordStr) {
+      try {
+        let data = JSON.parse(this.recordStr)
+        // Ensure dateStr and timeStr. If only timestamp (date) is present
+        if (data.date) {
+            const dateObj = new Date(data.date)
+            const y = dateObj.getFullYear()
+            const m = String(dateObj.getMonth() + 1).padStart(2, '0')
+            const d = String(dateObj.getDate()).padStart(2, '0')
+            const h = String(dateObj.getHours()).padStart(2, '0')
+            const min = String(dateObj.getMinutes()).padStart(2, '0')
+            
+            data.dateStr = `${y}-${m}-${d}`
+            data.timeStr = `${h}:${min}`
+        }
+        
+        // Handle icon if different property names
+        if (!data.categoryIcon && data.icon) {
+          data.categoryIcon = data.icon
+        }
+
+        this.record = data
+      } catch (e) {
+        console.error('Parse record error', e)
+      }
+    }
+  },
+  goBack() {
+    router.back()
+  },
+  deleteRecord() {
+    prompt.showDialog({
+      title: '提示',
+      message: '确定要删除这条账单吗？',
+      buttons: [
+        { text: '取消', color: '#666666' },
+        { text: '删除', color: '#ff0000' }
+      ],
+      success: (data) => {
+        if (data.index === 1) {
+          this.doDelete()
+        }
+      }
+    })
+  },
+  doDelete() {
+    storage.get({
+      key: 'accounting_records',
+      success: (data) => {
+        let records = []
+        try {
+          const value = data && data.data !== undefined ? data.data : data
+          if (value) {
+            records = JSON.parse(value)
+          }
+        } catch (e) {
+          records = []
+        }
+
+        // Filter out the current record. 
+        // Using timestamp (date) and amount/category as unique identifier
+        const newRecords = records.filter(r => {
+             // If deleted record has 'date', compare it.
+             if (this.record.date && r.date) {
+                 return r.date !== this.record.date
+             }
+             // Fallback if no date (shouldn't happen with new records)
+             return r.dateStr !== this.record.dateStr || r.amount !== this.record.amount || r.category !== this.record.category
+        })
+        
+        storage.set({
+          key: 'accounting_records',
+          value: JSON.stringify(newRecords),
+          success: () => {
+             prompt.showToast({ message: '删除成功' })
+             setTimeout(() => {
+               router.back()
+             }, 500)
+          },
+          fail: () => {
+              prompt.showToast({ message: '删除失败' })
+          }
+        })
+      },
+      fail: () => {
+          prompt.showToast({ message: '读取数据失败' })
+      }
+    })
+  }
+}
+</script>
+
+<style>
+.page {
+  flex-direction: column;
+  background-color: #f7f8fa;
+  height: 100%;
+}
+
+.header-section {
+  width: 100%;
+  height: 180px; /* Reduced height, 280 might be too tall */
+  position: relative;
+  flex-direction: column;
+}
+
+.header-bg {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  object-fit: cover;
+}
+
+.header-content {
+  width: 100%;
+  height: 80px; 
+  flex-direction: row;
+  align-items: center;
+  padding-left: 10px;
+  padding-right: 10px;
+  margin-top: 30px; 
+}
+
+.back-box {
+  position: absolute;
+  left: 7px;
+  top: 15px;
+  width: 22px;
+  height: 22px;
+  border-radius: 12px;
+  background-color: rgba(255, 255, 255, 0.3);
+  justify-content: center;
+  align-items: center;
+}
+
+.back-icon {
+  width: 6px;
+  height: 10px;
+  object-fit: contain;
+}
+
+.page-title {
+  font-size: 18px;
+  color: #333333; 
+  font-weight: bold;
+  margin-left: 10px;
+}
+
+/* Content Area */
+.content-wrapper {
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  margin-top: -100px; /* Overlap header */
+  padding-left: 15px;
+  padding-right: 15px;
+  padding-bottom: 20px;
+}
+
+.receipt-card {
+  width: 100%;
+  position: relative;
+  /* Remove flex-direction for stack? No, absolute bg handles it */
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.receipt-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  resize-mode: stretch; 
+}
+
+.receipt-content {
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  padding-top: 50px; /* Top padding inside receipt */
+  padding-left: 20px;
+  padding-right: 20px;
+  padding-bottom: 40px;
+}
+
+.receipt-header {
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 30px;
+  width: 100%;
+  justify-content: center;
+}
+
+.category-icon {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+
+.header-category-icon {
+  margin-right: 10px;
+}
+
+.amount-row {
+  flex-direction: row;
+  align-items: center; 
+  justify-content: center;
+}
+
+.amount-symbol {
+  font-size: 15px;
+  color: #000000;
+  margin-right: 3px;
+  font-weight: bold;
+}
+
+.amount-value {
+  font-size: 22px;
+  color: #000000;
+  font-weight: bold;
+  margin-right: 7px;
+}
+
+.type-tag {
+  font-size: 9px;
+  padding-top: 1px;
+  padding-bottom: 1px;
+  padding-left: 5px;
+  padding-right: 5px;
+  border-radius: 4px;
+  height: 16px;
+  align-self: center; /* Center vertically with amount */
+}
+
+.income-tag {
+  background-color: rgba(45, 202, 200, 0.1);
+  color: #2dcac8;
+}
+
+.expense-tag {
+  background-color: rgba(248, 83, 143, 0.1);
+  color: #f8538f;
+}
+
+.divider-dashed {
+  width: 100%;
+  height: 0px;
+  border-bottom-width: 1px;
+  border-color: #cccccc;
+  border-style: dashed;
+  margin-bottom: 20px;
+}
+
+.info-list {
+  width: 100%;
+  flex-direction: column;
+  padding-left: 20px;
+  padding-right: 20px;
+}
+
+.info-item {
+  flex-direction: row;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  width: 100%;
+  align-items: center;
+}
+
+.info-label {
+  font-size: 10px;
+  color: #999999;
+}
+
+.info-value {
+  font-size: 10px;
+  color: #000000;
+  text-align: right;
+  flex: 1; /* Take remaining space */
+  margin-left: 10px;
+}
+
+.footer {
+  width: 100%;
+  padding-left: 20px;
+  padding-right: 20px;
+  padding-bottom: 30px;
+  padding-top: 10px;
+  justify-content: center;
+}
+
+.delete-btn {
+  width: 100%;
+  height: 48px;
+  background-color: #ea3232;
+  border-radius: 24px;
+  justify-content: center;
+  align-items: center;
+}
+
+.delete-text {
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: bold;
+}
+</style>

@@ -1,0 +1,94 @@
+<template>
+  <div class="webview-page">
+    <web
+      src="{{url}}"
+      id="web"
+      class="web-content"
+      allowthirdpartycookies="true"
+      onpagefinish="onPageFinish"
+      onpagestart="onPageStart"
+      onerror="onError"
+    >
+    </web>
+  </div>
+</template>
+
+<script>
+import router from '@system.router'
+
+export default {
+  data() {
+    return {
+      title: '',
+      url: '',
+      isBacking: false
+    }
+  },
+
+  onInit() {
+    if (this.title) {
+      try {
+        this.$page.setTitleBar({ text: this.title })
+      } catch (e) {
+        console.error('设置标题失败', e)
+      }
+    }
+  },
+
+  onBackPress() {
+    if (this.isBacking) {
+      return true
+    }
+    this.isBacking = true
+
+    const webElement = this.$element('web')
+    if (webElement) {
+      webElement.canBack({
+        callback: (canBack) => {
+          if (canBack) {
+            webElement.back()
+            setTimeout(() => {
+              this.isBacking = false
+            }, 300)
+          } else {
+            router.back()
+          }
+        }
+      })
+      return true
+    }
+
+    this.isBacking = false
+    return false
+  },
+
+  onPageStart() {
+    console.log('页面开始加载')
+  },
+
+  onPageFinish() {
+    console.log('页面加载完成')
+  },
+
+  onDestroy() {
+    console.log('Webview页面销毁')
+  },
+
+  onError(evt) {
+    console.error('Webview加载错误', evt)
+  }
+}
+</script>
+
+<style>
+.webview-page {
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+.web-content {
+  width: 100%;
+  flex: 1;
+}
+</style>
