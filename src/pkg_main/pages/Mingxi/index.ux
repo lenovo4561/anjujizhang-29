@@ -1,0 +1,1032 @@
+<template>
+  <div class="page">
+    <list class="main-list">
+      <list-item type="top-area" class="top-section-item">
+        <div class="header-area">
+          <stack class="header-bg-group">
+            <image class="header-bg-base" src="../../assets/img/jizhang-bg-5.png"></image>
+            <div class="header-decor-row">
+              <div class="header-left">
+                <div class="top-row">
+                </div>
+              </div>
+            </div>
+          </stack>
+        </div>
+
+        <div class="data-card-wrapper">
+          <div class="data-card">
+            <div class="blur-layer"></div>
+            <div class="frost-overlay"></div>
+            <div class="card-content">
+              <div class="card-header">
+                <div class="balance-title-wrap">
+                  <text class="balance-title">本月结余(元)</text>
+                </div>
+                <div class="month-picker-wrapper">
+                  <div class="date-tag-new" onclick="showMonthPicker">
+                    <text class="date-txt-new">{{currentYear}}年{{currentMonthText}}月</text>
+                    <image class="arrow-down-icon" src="../../assets/img/xia.png"></image>
+                  </div>
+                </div>
+              </div>
+              <picker
+                id="monthPicker"
+                class="month-picker"
+                type="text"
+                range="{{monthRange}}"
+                value="{{monthValue}}"
+                onchange="onMonthChange"
+              ></picker>
+              <div class="amount-row-new">
+                <text class="amount-large-new {{isOverBudget ? 'red-text' : ''}}">¥{{monthBalance}}</text>
+                <text class="over-budget-tag" if="{{isOverBudget}}">已超支</text>
+              </div>
+              
+              <div class="card-row-three">
+                <div class="card-col-new">
+                  <text class="sub-label-new">本月收入</text>
+                  <text class="sub-amount-income">¥{{monthIncome}}</text>
+                </div>
+                <div class="card-col-new line-left">
+                  <text class="sub-label-new">本月支出</text>
+                  <text class="sub-amount-expense">¥{{monthExpense}}</text>
+                </div>
+                <div class="card-col-new line-left" onclick="showBudgetPopup">
+                  <text class="sub-label-new">本月预算</text>
+                  <div class="budget-wrap-new">
+                    <text class="sub-amount-budget">{{monthBudget ? '¥' + monthBudget : '未设置'}}</text>
+                    <image class="edit-icon" src="../../assets/img/jilu.png"></image>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="list-wrapper">
+          <div class="list-header">
+            <div class="list-title-wrap">
+              <div class="orange-bar"></div>
+              <text class="list-title">收支明细</text>
+            </div>
+            <!-- filter group removed to match image? no, I will keep it but hide it or remove it if they want it exactly as the image. Image has NO filter group. -->
+          </div>
+        </div>
+      </list-item>
+
+      <block for="{{(groupIndex, group) in billList}}">
+        <list-item type="group-header" class="group-header-new">
+          <div class="date-tag-bg">
+            <text class="date-text-new-style">{{group.dateLabel}}</text>
+          </div>
+        </list-item>
+
+        <list-item type="group-items" class="group-items-wrapper">
+          <div class="group-card">
+            <div class="bill-item-row" for="{{(itemIndex, item) in group.items}}" onclick="toDetail(item, group)">
+              <image class="bill-icon" src="{{item.icon}}"></image>
+              <div class="bill-info">
+                <div class="bill-row-top">
+                  <text class="bill-category">{{item.category}}</text>
+                  <text class="bill-amount {{item.type === 'expense' ? 'expense-text' : 'income-text'}}">{{item.amount}}</text>
+                </div>
+                <div class="bill-row-bottom">
+                  <text class="bill-time">{{item.time}}</text>
+                  <text class="bill-balance" if="{{item.balance !== undefined}}">余额: {{item.balance}}</text>
+                </div>
+              </div>
+            </div>
+          </div>
+        </list-item>
+      </block>
+
+      <list-item type="bottom-cap" class="list-bottom-cap" if="{{billList.length > 0}}"></list-item>
+
+      <list-item type="empty" class="empty-state-item" if="{{billList.length === 0}}">
+        <div class="empty-state">
+          <image class="empty-icon" src="../../assets/img/kong.png"></image>
+          <text class="empty-text">当前暂无数据~</text>
+        </div>
+      </list-item>
+
+      <list-item type="spacer" class="list-spacer"></list-item>
+    </list>
+
+
+
+    <!-- 预算弹窗 -->
+    <div class="budget-popup-mask" if="{{isBudgetPopupVisible}}">
+      <div class="budget-popup-content">
+        <text class="budget-popup-title">设置预算</text>
+        <text class="budget-popup-label">本月计划预算</text>
+        <div class="budget-input-wrapper">
+          <text class="currency-symbol">¥</text>
+          <input class="budget-input" type="number" placeholder="请输入本月预算" value="{{tempBudget}}" onchange="onBudgetChange" />
+        </div>
+        <div class="budget-popup-btns">
+          <text class="budget-btn-cancel" onclick="hideBudgetPopup">取消</text>
+          <text class="budget-btn-confirm" onclick="saveBudget">确定</text>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import router from '@system.router'
+import storage from '@system.storage'
+
+export default {
+  props: ['isActive'],
+  data: {
+    monthRange: [],
+    monthValue: '01月',
+    currentYear: 2026,
+    currentMonth: 2,
+    currentMonthText: '02',
+    showAmount: false,
+    filterType: 'all',
+    billList: [],
+    monthIncome: '0.00',
+    monthExpense: '0.00',
+    monthBalance: '0.00',
+    isOverBudget: false,
+    monthBudget: '',
+    isBudgetPopupVisible: false,
+    tempBudget: ''
+  },
+  onInit() {
+    const date = new Date()
+    this.currentYear = date.getFullYear()
+    this.currentMonth = date.getMonth() + 1
+    this.currentMonthText = String(this.currentMonth).padStart(2, '0')
+    this.monthValue = `${String(this.currentMonth).padStart(2, '0')}月`
+
+    const months = []
+    for (let i = 1; i <= 12; i++) {
+      months.push(`${String(i).padStart(2, '0')}月`)
+    }
+    this.monthRange = months
+
+    this.loadMonthData()
+  },
+  onShow() {
+    this.loadMonthData()
+  },
+  onReady() {
+    this.$watch('isActive', (newVal) => {
+      if (newVal === true) {
+        this.loadMonthData()
+        this.loadBudget()
+      }
+    })
+  },
+  loadBudget() {
+    storage.get({
+      key: `budget_${this.currentYear}_${this.currentMonth}`,
+      success: data => {
+        const value = data && data.data !== undefined ? data.data : data
+        if (value) {
+          this.monthBudget = this.formatNumberWithComma(value)
+          
+          // Re-evaluate over budget based on set budget instead of negative balance
+          const totalExpenseRaw = parseFloat(this.monthExpense.replace(/,/g, '')) || 0;
+          this.isOverBudget = totalExpenseRaw > parseFloat(value);
+        } else {
+          this.monthBudget = ''
+          
+          // Recalculate default over-budget logic
+          const income = parseFloat(this.monthIncome.replace(/,/g, '')) || 0;
+          const expense = parseFloat(this.monthExpense.replace(/,/g, '')) || 0;
+          this.isOverBudget = (income - expense) < 0
+        }
+      }
+    })
+  },
+  loadMonthData() {
+    storage.get({
+      key: 'accounting_records',
+      success: data => {
+        const storageValue = data && data.data !== undefined ? data.data : data
+        let allRecords = []
+        if (storageValue) {
+          try {
+            allRecords = JSON.parse(storageValue)
+          } catch (e) {
+            console.error('解析记录失败', e)
+          }
+        }
+
+        // Build running balance from all records in chronological order,
+        // so each month's detail item shows a consistent account balance.
+        const getRecordTimestamp = (record) => {
+          if (!record) return 0
+          if (record.date !== undefined && record.date !== null && record.date !== '') {
+            const numericTs = Number(record.date)
+            if (!isNaN(numericTs) && numericTs > 0) {
+              return numericTs
+            }
+            const parsedTs = new Date(record.date).getTime()
+            if (!isNaN(parsedTs)) {
+              return parsedTs
+            }
+          }
+          if (record.dateStr) {
+            const fallbackTs = new Date(record.dateStr + ' 00:00:00').getTime()
+            if (!isNaN(fallbackTs)) {
+              return fallbackTs
+            }
+          }
+          return 0
+        }
+
+        const allRecordsSortedAsc = [...allRecords].sort((a, b) => getRecordTimestamp(a) - getRecordTimestamp(b))
+        let runningBalance = 0
+        allRecordsSortedAsc.forEach(r => {
+          const amount = Number(r.amount) || 0
+          if (r.type === 'income') {
+            runningBalance += amount
+          } else if (r.type === 'expense') {
+            runningBalance -= amount
+          }
+          r.calculatedBalance = runningBalance
+        })
+
+        const monthStr = this.currentMonth < 10 ? '0' + this.currentMonth : '' + this.currentMonth
+        const yearMonthPrefix = `${this.currentYear}-${monthStr}`
+
+        let monthRecords = allRecords.filter(r => r.dateStr && r.dateStr.startsWith(yearMonthPrefix))
+
+        if (this.filterType === 'expense') {
+          monthRecords = monthRecords.filter(r => r.type === 'expense')
+        } else if (this.filterType === 'income') {
+          monthRecords = monthRecords.filter(r => r.type === 'income')
+        }
+
+        let totalIncome = 0
+        let totalExpense = 0
+        allRecords.filter(r => r.dateStr && r.dateStr.startsWith(yearMonthPrefix)).forEach(r => {
+          const amount = Number(r.amount) || 0
+          if (r.type === 'income') {
+            totalIncome += amount
+          } else if (r.type === 'expense') {
+            totalExpense += amount
+          }
+        })
+
+        this.monthIncome = this.formatNumberWithComma(totalIncome)
+        this.monthExpense = this.formatNumberWithComma(totalExpense)
+        this.monthBalance = this.formatNumberWithComma(totalIncome - totalExpense)
+        this.isOverBudget = (totalIncome - totalExpense) < 0
+
+        const groupMap = {}
+
+        monthRecords.forEach(r => {
+          const dateStr = r.dateStr
+          if (!groupMap[dateStr]) {
+            groupMap[dateStr] = {
+              dateStr: dateStr,
+              items: [],
+              income: 0,
+              expense: 0
+            }
+          }
+          groupMap[dateStr].items.push(r)
+          const amount = Number(r.amount) || 0
+          if (r.type === 'income') {
+            groupMap[dateStr].income += amount
+          } else {
+            groupMap[dateStr].expense += amount
+          }
+        })
+
+        const today = new Date()
+        const yDay = new Date()
+        yDay.setDate(yDay.getDate() - 1)
+        const formatD = d => `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`
+        const todayStr = formatD(today)
+        const yesterdayStr = formatD(yDay)
+
+        const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+        const groups = Object.keys(groupMap)
+          .sort((a, b) => new Date(b) - new Date(a))
+          .map(dateStr => {
+            const group = groupMap[dateStr]
+            let dateLabel = dateStr
+            if (dateStr === todayStr) {
+               dateLabel = '今天'
+            } else if (dateStr === yesterdayStr) {
+               dateLabel = '昨天'
+            }
+
+            return {
+              dateLabel: dateLabel,
+              income: group.income.toFixed(2),
+              expense: group.expense.toFixed(2),
+              items: group.items.map(item => ({
+                icon: item.categoryIcon || '../../assets/img/qita.png',
+                category: item.category || '其他',
+                amount: item.type === 'income' ? '+¥' + this.formatNumberWithComma(item.amount) : '-¥' + this.formatNumberWithComma(item.amount),
+                balance: this.formatNumberWithComma((() => {
+                  const hasRawBalance = item.balance !== undefined && item.balance !== null && item.balance !== ''
+                  const rawValue = hasRawBalance ? Number(item.balance) : Number(item.calculatedBalance)
+                  return isNaN(rawValue) ? 0 : rawValue
+                })()),
+                time: this.formatTime(item.date),
+                type: item.type,
+                originalData: item
+              })).sort((a, b) => new Date(b.originalData.date) - new Date(a.originalData.date))
+            }
+          })
+
+        this.billList = groups
+      },
+      fail: () => {
+        this.billList = []
+        this.monthIncome = '0.00'
+        this.monthExpense = '0.00'
+        this.monthBalance = '0.00'
+      },
+      complete: () => {
+        this.loadBudget()
+      }
+    })
+  },
+  toDetail(item, group) {
+    console.info('To detail with:', item)
+    router.push({
+      uri: '/pkg_main/pages/DemoDetail',
+      params: {
+        recordStr: JSON.stringify(item.originalData || item)
+      }
+    })
+  },
+  formatTime(timestamp) {
+    if (!timestamp) return ''
+    const date = new Date(timestamp)
+    const hours = date.getHours()
+    const minutes = date.getMinutes()
+    return `${hours < 10 ? '0' + hours : hours}:${minutes < 10 ? '0' + minutes : minutes}`
+  },
+  formatNumberWithComma(numStr) {
+    if (!numStr && numStr !== 0) return '0.00'
+    const parts = Number(numStr).toFixed(2).split('.')
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+    return parts.join('.')
+  },
+  toDetail(item) {
+    const detailData = item.originalData || item
+    router.push({
+      uri: '/pkg_main/pages/DemoDetail',
+      params: {
+        recordStr: JSON.stringify(detailData)
+      }
+    })
+  },
+  toggleAmount() {
+    this.showAmount = !this.showAmount
+  },
+  setFilter(type) {
+    this.filterType = type
+    this.loadMonthData()
+  },
+  showMonthPicker() {
+    this.$element('monthPicker').show()
+  },
+  onMonthChange(e) {
+    if (!e || e.newValue === undefined) {
+      return
+    }
+
+    const nextMonth = parseInt(e.newValue)
+    if (isNaN(nextMonth) || nextMonth < 1 || nextMonth > 12) {
+      return
+    }
+
+    this.currentMonth = nextMonth
+    this.currentMonthText = String(nextMonth).padStart(2, '0')
+    this.monthValue = `${String(nextMonth).padStart(2, '0')}月`
+    this.loadMonthData()
+  },
+  showBudgetPopup() {
+    this.tempBudget = this.monthBudget ? this.monthBudget.replace(/,/g, '') : ''
+    this.isBudgetPopupVisible = true
+  },
+  hideBudgetPopup() {
+    this.isBudgetPopupVisible = false
+  },
+  onBudgetChange(e) {
+    this.tempBudget = e.value
+  },
+  saveBudget() {
+    if (this.tempBudget && parseFloat(this.tempBudget) >= 0) {
+      storage.set({
+        key: `budget_${this.currentYear}_${this.currentMonth}`,
+        value: this.tempBudget,
+        success: () => {
+          this.isBudgetPopupVisible = false
+          this.loadBudget()
+        }
+      })
+    } else {
+      // Clear budget if empty
+      storage.delete({
+        key: `budget_${this.currentYear}_${this.currentMonth}`,
+        success: () => {
+          this.isBudgetPopupVisible = false
+          this.loadBudget()
+        }
+      })
+    }
+  },
+  goToRecord() {
+    this.$dispatch('switchToTab', { index: 1 })
+  }
+}
+</script>
+
+<style>
+.page {
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background-color: #f7f8fa;
+}
+
+.main-list {
+  flex: 1;
+  width: 100%;
+}
+
+.top-section-item {
+  flex-direction: column;
+}
+
+.header-area {
+  width: 100%;
+  height: 180px;
+  position: relative;
+  flex-direction: column;
+  align-items: center;
+}
+
+.header-bg-group {
+  width: 100%;
+  height: 180px;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.header-bg-base {
+  width: 100%;
+  height: 100%;
+  resize-mode: cover;
+}
+
+.header-decor-row {
+  width: 100%;
+  height: 100%;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  padding: 50px 30px 50px 8px;
+  position: relative;
+  z-index: 10;
+}
+
+.header-left {
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  margin-bottom: 25px;
+  min-width: 180px;
+}
+
+.mini-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+.top-row {
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 6px;
+  flex-shrink: 0;
+}
+
+.date-tag {
+  flex-direction: row;
+  align-items: center;
+  flex-shrink: 0;
+  justify-content: center;
+  margin-left: -10px;
+}
+
+.arrow-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  margin: 0 4px;
+  padding: 6px;
+  flex-shrink: 0;
+  margin-top: -2px;
+}
+
+.date-txt {
+  text-align: center;
+  lines: 1;
+  flex-shrink: 0;
+}
+
+.year-txt {
+  font-size: 12px;
+  font-weight: bold;
+  color: #006f75;
+}
+
+.month-txt {
+  font-size: 12px;
+  font-weight: bold;
+  color: #fa5b16;
+}
+
+.mascot-img {
+  width: 145px;
+  height: 145px;
+  object-fit: contain;
+  position: absolute;
+  top: 0;
+  right: 0;
+  pointer-events: none;
+}
+
+.data-card-wrapper {
+  padding: 0 8px;
+  margin-top: -90px;
+  position: relative;
+  z-index: 10;
+}
+
+.data-card {
+  width: 100%;
+  min-height: 120px;
+  border-radius: 16px;
+  overflow: hidden;
+  position: relative;
+}
+
+.blur-layer {
+  position: absolute;
+  top: -12px;
+  left: -12px;
+  right: -12px;
+  bottom: -12px;
+  background-color: rgba(255, 255, 255, 0.6);
+  filter: blur(10px);
+}
+
+.frost-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.5),
+    rgba(255, 255, 255, 0.7),
+    rgba(255, 255, 255, 0.85)
+  );
+  border-radius: 16px;
+}
+
+.card-content {
+  position: relative;
+  z-index: 2;
+  flex-direction: column;
+  background-color: transparent;
+  border-radius: 16px;
+  padding: 20px 15px;
+  min-height: 100px;
+  padding-top:10px
+}
+
+.card-header {
+  width: 100%;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.balance-title-wrap {
+  width: 120px;
+  flex-direction: row;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.balance-title {
+  font-size: 10px;
+  color: #333333;
+  lines: 1;
+  width: 120px;
+}
+
+.date-tag-new {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 96px;
+  height: 20px;
+}
+
+.month-picker-wrapper {
+  position: relative;
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  padding-left: 6px;
+}
+
+.month-picker {
+  position: fixed;
+  top: -9999px;
+  left: -9999px;
+  width: 0px;
+  height: 0px;
+  opacity: 0;
+}
+
+.date-txt-new {
+  font-size: 10px;
+  color: #333333;
+  margin-right: 4px;
+  lines: 1;
+  text-align: right;
+}
+
+.arrow-down-icon {
+  width: 10px;
+  height: 10px;
+  resize-mode: contain;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.amount-row-new {
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.amount-large-new {
+  font-size: 26px;
+  font-weight: bold;
+  color: #333333;
+}
+
+.red-text {
+  color: #ff3b30;
+}
+
+.over-budget-tag {
+  font-size: 8px;
+  color: #ff3b30;
+  background-color: #ffeceb;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-left: 6px;
+}
+
+.card-row-three {
+  width: 100%;
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: stretch;
+}
+
+.card-col-new {
+  width: 33.33%;
+  flex-direction: column;
+  align-items: flex-start;
+  box-sizing: border-box;
+}
+
+.line-left {
+  padding-left: 10px;
+  border-left-width: 1px;
+  border-left-color: #eeeeee;
+}
+
+.sub-label-new {
+  font-size: 9px;
+  color: #666666;
+  margin-bottom: 8px;
+}
+
+.sub-amount-income {
+  font-size: 11px;
+  font-weight: bold;
+  color: #2ed8cc;
+}
+
+.sub-amount-expense {
+  font-size: 11px;
+  font-weight: bold;
+  color: #ff527f;
+}
+
+.budget-wrap-new {
+  flex-direction: row;
+  align-items: center;
+}
+
+.sub-amount-budget {
+  font-size: 9px;
+  font-weight: bold;
+  color: #999999;
+  margin-right: 4px;
+}
+
+.edit-icon {
+  width: 10px;
+  height: 10px;
+  object-fit: contain;
+}
+
+.list-wrapper {
+  flex-direction: column;
+  margin-top: 10px;
+}
+
+.list-header {
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+  background-color: transparent;
+  padding: 15px 8px;
+  margin: 0 8px;
+}
+
+.list-title-wrap {
+  flex-direction: row;
+  align-items: center;
+}
+
+.orange-bar {
+  width: 4px;
+  height: 14px;
+  background-color: #f75510;
+  border-radius: 2px;
+  margin-right: 6px;
+}
+
+.list-title {
+  font-size: 12px;
+  font-weight: bold;
+  color: #333333;
+}
+
+.group-header-new {
+  flex-direction: row;
+  padding: 6px 10px 4px 10px;
+  background-color: transparent;
+}
+
+.date-tag-bg {
+  background-color: #e5e5ea;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.date-text-new-style {
+  font-size: 9px;
+  color: #333333;
+}
+
+.group-items-wrapper {
+  flex-direction: column;
+  padding: 0;
+}
+
+.group-card {
+  flex-direction: column;
+  background-color: #ffffff;
+  border-radius: 10px;
+  margin: 0 10px 10px 10px;
+  padding: 0 10px;
+}
+
+.bill-item-row {
+  padding: 10px 0;
+  border-bottom-width: 1px;
+  border-bottom-color: #f0f0f0;
+  flex-direction: row;
+  align-items: center;
+}
+
+.list-bottom-cap {
+  height: 15px;
+  background-color: transparent;
+  margin: 0 8px;
+}
+
+.bill-icon {
+  width: 30px;
+  height: 30px;
+  margin-right: 8px;
+  object-fit: contain;
+  border-radius: 15px;
+}
+
+.bill-info {
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.bill-row-top {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 3px;
+}
+
+.bill-category {
+  font-size: 10px;
+  color: #333333;
+}
+
+.bill-amount {
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.expense-text {
+  color: #333333;
+}
+
+.income-text {
+  color: #333333;
+}
+
+.bill-row-bottom {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.bill-time {
+  font-size: 8px;
+  color: #999999;
+}
+
+.bill-balance {
+  font-size: 8px;
+  color: #999999;
+}
+
+.empty-state-item {
+  flex-direction: column;
+}
+
+.empty-state {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.empty-icon {
+  width: 120px;
+  height: 120px;
+  object-fit: contain;
+  margin-bottom: 5px;
+}
+
+.empty-text {
+  font-size: 8px;
+  color: #cccccc;
+}
+
+.list-spacer {
+  height: 100px;
+  width: 100%;
+}
+
+.fab-btn {
+  position: fixed;
+  bottom: 80px;
+  right: 20px;
+  width: 56px;
+  height: 56px;
+  background-color: transparent;
+  justify-content: center;
+  align-items: center;
+}
+
+.fab-icon {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+}
+
+/* 预算弹窗样式 */
+.budget-popup-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.budget-popup-content {
+  width: 80%;
+  background: linear-gradient(to top, #FFFFFF 68%, #A8FFF6 100%);
+  border-radius: 12px;
+  flex-direction: column;
+  padding: 15px;
+  align-items: center;
+}
+
+.budget-popup-title {
+  font-size: 12px;
+  font-weight: bold;
+  color: #333333;
+  margin-bottom: 15px;
+}
+
+.budget-popup-label {
+  font-size: 10px;
+  color: #333333;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 8px;
+}
+
+.budget-input-wrapper {
+  width: 100%;
+  height: 35px;
+  background-color: #fcfcfc;
+  border-radius: 6px;
+  flex-direction: row;
+  align-items: center;
+  padding: 0 8px;
+  margin-bottom: 15px;
+}
+
+.currency-symbol {
+  font-size: 14px;
+  font-weight: bold;
+  color: #000000;
+  margin-right: 8px;
+}
+
+.budget-input {
+  flex: 1;
+  font-size: 12px;
+  color: #333333;
+  background-color: transparent;
+}
+
+.budget-popup-btns {
+  width: 100%;
+  flex-direction: row;
+  justify-content: space-between;
+}
+
+.budget-btn-cancel {
+  width: 45%;
+  height: 32px;
+  line-height: 32px;
+  text-align: center;
+  font-size: 11px;
+  color: #333333;
+  border: 1px solid #333333;
+  border-radius: 6px;
+  background-color: #ffffff;
+}
+
+.budget-btn-confirm {
+  width: 45%;
+  height: 32px;
+  line-height: 32px;
+  text-align: center;
+  font-size: 11px;
+  color: #ffffff;
+  background-color: #2ed8cc;
+  border-radius: 6px;
+}
+</style>

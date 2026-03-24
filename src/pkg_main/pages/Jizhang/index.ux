@@ -1,0 +1,786 @@
+<template>
+  <div class="jizhang-page">
+    <list class="content-wrapper">
+      <list-item type="header" class="header-item">
+        <div class="header-wrapper">
+          <image class="header-bg" src="../../assets/img/jizhang-bg-1.png"></image>
+        </div>
+
+
+
+        <div class="type-switch-wrap">
+          <div class="blur-layer"></div>
+          <div class="frost-overlay"></div>
+          <div class="type-switch">
+            <div class="type-item {{currentType === 'expense' ? 'type-item-expense-active' : ''}}" onclick="switchType('expense')">
+              <text class="type-text {{currentType === 'expense' ? 'type-text-active' : 'type-text-inactive'}}">支出</text>
+            </div>
+            <div class="type-item {{currentType === 'income' ? 'type-item-income-active' : ''}}" onclick="switchType('income')">
+              <text class="type-text {{currentType === 'income' ? 'type-text-active' : 'type-text-inactive'}}">收入</text>
+            </div>
+          </div>
+        </div>
+
+        <div class="category-container">
+          <div class="category-stack">
+            <div class="blur-layer-stack"></div>
+            <div class="frost-overlay-stack"></div>
+
+            <swiper class="category-swiper swiper-expense" indicator="true" loop="false" if="{{currentType === 'expense'}}">
+              <block for="{{categoryPages}}">
+                <div class="category-page">
+                  <block for="{{$item}}">
+                    <div class="category-item" onclick="selectCategory($item)">
+                      <div class="icon-circle {{selectedCategory === $item.name ? 'selected-icon-bg' : ''}}">
+                        <image src="{{$item.icon}}" class="category-icon"></image>
+                      </div>
+                      <text class="category-name {{selectedCategory === $item.name ? 'selected-text' : ''}}">{{ $item.name }}</text>
+                    </div>
+                  </block>
+                </div>
+              </block>
+            </swiper>
+
+            <swiper class="category-swiper swiper-income" indicator="true" loop="false" if="{{currentType === 'income'}}">
+              <block for="{{categoryPages}}">
+                <div class="category-page">
+                  <block for="{{$item}}">
+                    <div class="category-item" onclick="selectCategory($item)">
+                      <div class="icon-circle {{selectedCategory === $item.name ? 'selected-icon-bg' : ''}}">
+                        <image src="{{$item.icon}}" class="category-icon"></image>
+                      </div>
+                      <text class="category-name {{selectedCategory === $item.name ? 'selected-text' : ''}}">{{ $item.name }}</text>
+                    </div>
+                  </block>
+                </div>
+              </block>
+            </swiper>
+          </div>
+        </div>
+
+        <div class="bottom-panel">
+          <div class="input-row">
+            <div class="note-input-wrapper">
+              <input
+                class="note-input"
+                type="text"
+                placeholder="点击添加备注"
+                value="{{note}}"
+                onchange="onNoteChange"
+              />
+            </div>
+            <div class="amount-wrapper">
+              <text class="currency-symbol">¥</text>
+              <text class="amount-text">{{ amount || '0.00' }}</text>
+            </div>
+          </div>
+
+          <div class="keyboard">
+            <div class="key-row">
+              <div class="key-cell" onclick="onKeyPress('1')"><text class="key-num">1</text></div>
+              <div class="key-cell" onclick="onKeyPress('2')"><text class="key-num">2</text><text class="key-sub">ABC</text></div>
+              <div class="key-cell" onclick="onKeyPress('3')"><text class="key-num">3</text><text class="key-sub">DEF</text></div>
+            </div>
+            <div class="key-row">
+              <div class="key-cell" onclick="onKeyPress('4')"><text class="key-num">4</text><text class="key-sub">GHI</text></div>
+              <div class="key-cell" onclick="onKeyPress('5')"><text class="key-num">5</text><text class="key-sub">JKL</text></div>
+              <div class="key-cell" onclick="onKeyPress('6')"><text class="key-num">6</text><text class="key-sub">MNO</text></div>
+            </div>
+            <div class="key-row">
+              <div class="key-cell" onclick="onKeyPress('7')"><text class="key-num">7</text><text class="key-sub">PQRS</text></div>
+              <div class="key-cell" onclick="onKeyPress('8')"><text class="key-num">8</text><text class="key-sub">TUV</text></div>
+              <div class="key-cell" onclick="onKeyPress('9')"><text class="key-num">9</text><text class="key-sub">WXYZ</text></div>
+            </div>
+            <div class="key-row">
+              <div class="key-cell" onclick="onKeyPress('0')"><text class="key-num">0</text></div>
+              <div class="key-cell" onclick="onKeyPress('.')"><text class="key-num">.</text></div>
+              <div class="key-cell" onclick="onKeyPress('del')">
+                <image src="../../assets/img/dele.png" class="key-del-icon"></image>
+              </div>
+            </div>
+            <div class="key-row footer-row">
+              <div class="date-wrapper">
+                <div class="date-view">
+                  <text class="date-text">{{ displayDate }}</text>
+                </div>
+                <picker
+                  class="date-picker-overlay"
+                  type="date"
+                  value="{{selectedDate}}"
+                  onchange="onDateChange"
+                ></picker>
+              </div>
+              <div class="submit-btn" onclick="submitRecord">
+                <text class="submit-text">记一笔</text>
+              </div>
+            </div>
+          </div>
+        </div>
+      </list-item>
+
+      <list-item type="spacer" class="bottom-spacer"></list-item>
+    </list>
+  </div>
+</template>
+
+<script>
+import storage from '@system.storage'
+import prompt from '@system.prompt'
+
+export default {
+  data: {
+    currentType: 'expense',
+    amount: '',
+    note: '',
+    selectedCategory: '餐饮',
+    selectedCategoryIcon: '../../assets/img/zhihcu_icon/canyin.png',
+    selectedDate: '',
+    displayDate: '今日',
+    expenseCategoryGroups: [
+      {
+        title: '支出',
+        items: [
+          { name: '餐饮', icon: '../../assets/img/zhihcu_icon/canyin.png' },
+          { name: '购物', icon: '../../assets/img/zhihcu_icon/gouwu.png' },
+          { name: '蔬菜', icon: '../../assets/img/zhihcu_icon/shucai.png' },
+          { name: '水果', icon: '../../assets/img/zhihcu_icon/shuiguo.png' },
+          { name: '零食', icon: '../../assets/img/zhihcu_icon/lingshi.png' },
+          { name: '交通', icon: '../../assets/img/zhihcu_icon/jiaotong.png' },
+          { name: '通讯', icon: '../../assets/img/zhihcu_icon/tongxun.png' },
+          { name: '娱乐', icon: '../../assets/img/zhihcu_icon/yule.png' },
+          { name: '水电', icon: '../../assets/img/zhihcu_icon/shuidian.png' },
+          { name: '住宿', icon: '../../assets/img/zhihcu_icon/zhusu.png' },
+          { name: '医疗', icon: '../../assets/img/zhihcu_icon/yiliao.png' },
+          { name: '教育', icon: '../../assets/img/zhihcu_icon/jiaoyu.png' },
+          { name: '外卖', icon: '../../assets/img/zhihcu_icon/waimai.png' },
+          { name: '化妆', icon: '../../assets/img/zhihcu_icon/huazhuang.png' },
+          { name: '家电', icon: '../../assets/img/zhihcu_icon/jiadian.png' },
+          { name: '家具', icon: '../../assets/img/zhihcu_icon/jiaju.png' },
+          { name: '文具', icon: '../../assets/img/zhihcu_icon/wenju.png' },
+          { name: '数码', icon: '../../assets/img/zhihcu_icon/shuma.png' },
+          { name: '旅行', icon: '../../assets/img/zhihcu_icon/lvxing.png' },
+          { name: '健身', icon: '../../assets/img/zhihcu_icon/jianshen.png' },
+          { name: '宠物', icon: '../../assets/img/zhihcu_icon/chongwu.png' },
+          { name: '美甲', icon: '../../assets/img/zhihcu_icon/meijia.png' },
+          { name: '母婴', icon: '../../assets/img/zhihcu_icon/muying-1.png' },
+          { name: '礼品', icon: '../../assets/img/zhihcu_icon/lipin.png' },
+          { name: '随礼', icon: '../../assets/img/zhihcu_icon/suili.png' },
+          { name: '理财', icon: '../../assets/img/zhihcu_icon/licai.png' },
+          { name: '保险', icon: '../../assets/img/zhihcu_icon/baoxian.png' },
+          { name: '其他', icon: '../../assets/img/zhihcu_icon/qita-2.png' }
+        ]
+      }
+    ],
+    incomeCategoryGroups: [
+      {
+        title: '收入',
+        items: [
+          { name: '工资', icon: '../../assets/img/shouru_icon/gongzi.png' },
+          { name: '兼职', icon: '../../assets/img/shouru_icon/jianzhi.png' },
+          { name: '投资', icon: '../../assets/img/shouru_icon/touzi.png' },
+          { name: '租金', icon: '../../assets/img/shouru_icon/zujin.png' },
+          { name: '出售', icon: '../../assets/img/shouru_icon/chushou.png' },
+          { name: '服务', icon: '../../assets/img/shouru_icon/fuwu.png' },
+          { name: '奖金', icon: '../../assets/img/shouru_icon/jiangjin.png' },
+          { name: '补贴', icon: '../../assets/img/shouru_icon/butie.png' },
+          { name: '捐赠', icon: '../../assets/img/shouru_icon/juanzeng.png' },
+          { name: '理赔', icon: '../../assets/img/shouru_icon/lipei.png' },
+          { name: '利息', icon: '../../assets/img/shouru_icon/lixi.png' },
+          { name: '退款', icon: '../../assets/img/shouru_icon/tuikuan.png' },
+          { name: '稿费', icon: '../../assets/img/shouru_icon/gaofei.png' },
+          { name: '版税', icon: '../../assets/img/shouru_icon/zhuanli.png' },
+          { name: '礼金', icon: '../../assets/img/shouru_icon/lijin.png' },
+          { name: '转账', icon: '../../assets/img/shouru_icon/zhuanzhang.png' },
+          { name: '中奖', icon: '../../assets/img/shouru_icon/zhongjiang.png' },
+          { name: '代购', icon: '../../assets/img/shouru_icon/daigou.png' },
+          { name: '家教', icon: '../../assets/img/shouru_icon/jiajiao.png' },
+          { name: '其他', icon: '../../assets/img/shouru_icon/qita.png' }
+        ]
+      }
+    ],
+    currentCategoryGroups: [],
+    categoryPages: []
+  },
+
+  onInit() {
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    const day = String(now.getDate()).padStart(2, '0')
+    this.selectedDate = `${year}-${month}-${day}`
+    this.displayDate = '今日'
+
+    this.currentCategoryGroups = this.expenseCategoryGroups
+    this.updateCategoryPages()
+  },
+
+  updateCategoryPages() {
+    if (!this.currentCategoryGroups || !Array.isArray(this.currentCategoryGroups)) {
+      this.categoryPages = []
+      return
+    }
+
+    let allItems = []
+    this.currentCategoryGroups.forEach((group) => {
+      if (group && group.items && Array.isArray(group.items)) {
+        allItems = allItems.concat(group.items)
+      }
+    })
+
+    const pages = []
+    const pageSize = 15
+    for (let i = 0; i < allItems.length; i += pageSize) {
+      pages.push(allItems.slice(i, i + pageSize))
+    }
+    this.categoryPages = pages
+
+    if (allItems.length > 0) {
+      this.selectedCategory = allItems[0].name
+      this.selectedCategoryIcon = allItems[0].icon
+    }
+  },
+
+  switchType(type) {
+    this.currentType = type
+    this.currentCategoryGroups = type === 'expense' ? this.expenseCategoryGroups : this.incomeCategoryGroups
+    this.updateCategoryPages()
+  },
+
+  selectCategory(item) {
+    if (!item) return
+    this.selectedCategory = item.name || '其他'
+    this.selectedCategoryIcon = item.icon || '../../assets/img/zhihcu_icon/qita-2.png'
+  },
+
+  onNoteChange(e) {
+    if (e && e.value !== undefined) {
+      this.note = e.value
+    }
+  },
+
+  onDateChange(e) {
+    if (!e) return
+
+    if (e.year !== undefined && e.month !== undefined && e.day !== undefined) {
+      const year = e.year
+      const month = e.month + 1
+      const day = e.day
+      const monthStr = String(month).padStart(2, '0')
+      const dayStr = String(day).padStart(2, '0')
+      this.selectedDate = `${year}-${monthStr}-${dayStr}`
+
+      const now = new Date()
+      const isToday =
+        year === now.getFullYear() &&
+        month === now.getMonth() + 1 &&
+        day === now.getDate()
+
+      this.displayDate = isToday ? '今日' : `${month}月${day}日`
+    }
+  },
+
+  onKeyPress(key) {
+    if (!key) return
+
+    if (key === 'del') {
+      if (this.amount && this.amount.length > 0) {
+        this.amount = this.amount.slice(0, -1)
+      }
+      return
+    }
+
+    if (key === '.') {
+      if (this.amount.indexOf('.') === -1) {
+        if (!this.amount) {
+          this.amount = '0.'
+        } else {
+          this.amount += key
+        }
+      }
+      return
+    }
+
+    if (!/^[0-9]$/.test(key)) return
+
+    if (!this.amount || this.amount === '0') {
+      this.amount = key
+      return
+    }
+
+    if (this.amount.indexOf('.') !== -1) {
+      const parts = this.amount.split('.')
+      if (parts[1] && parts[1].length >= 2) {
+        return
+      }
+    }
+
+    this.amount += key
+  },
+
+  submitRecord() {
+    if (!this.amount || parseFloat(this.amount) === 0) {
+      prompt.showToast({ message: '请输入金额' })
+      return
+    }
+
+    const dateParts = this.selectedDate.split('-')
+    if (dateParts.length !== 3) {
+      prompt.showToast({ message: '日期格式错误' })
+      return
+    }
+
+    const year = parseInt(dateParts[0])
+    const month = parseInt(dateParts[1]) - 1
+    const day = parseInt(dateParts[2])
+    const now = new Date()
+    const recordDate = new Date(year, month, day, now.getHours(), now.getMinutes(), now.getSeconds())
+
+    const record = {
+      categoryIcon: this.selectedCategoryIcon,
+      type: this.currentType,
+      category: this.selectedCategory,
+      amount: parseFloat(this.amount),
+      note: this.note || '',
+      date: recordDate.getTime(),
+      dateStr: this.selectedDate
+    }
+
+    storage.get({
+      key: 'accounting_records',
+      success: (data) => {
+        const value = data && data.data !== undefined ? data.data : data
+        let records = []
+        if (value) {
+          try {
+            records = JSON.parse(value)
+            if (!Array.isArray(records)) {
+              records = []
+            }
+          } catch (e) {
+            records = []
+          }
+        }
+
+        records.push(record)
+        this.saveRecords(records)
+      },
+      fail: () => {
+        this.saveRecords([record])
+      }
+    })
+  },
+
+  saveRecords(records) {
+    storage.set({
+      key: 'accounting_records',
+      value: JSON.stringify(records),
+      success: () => {
+        prompt.showToast({ message: '记账成功' })
+        this.amount = ''
+        this.note = ''
+        setTimeout(() => {
+          this.$dispatch('switchToTab', { index: 0 })
+        }, 400)
+      },
+      fail: () => {
+        prompt.showToast({ message: '保存失败，请重试' })
+      }
+    })
+  }
+}
+</script>
+
+<style>
+.jizhang-page {
+  flex-direction: column;
+  background-color: #f5f5f5;
+  height: 100%;
+  width: 100%;
+}
+
+.content-wrapper {
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+}
+
+list-item {
+  overflow: visible;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+}
+
+.header-item {
+  flex-direction: column;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+}
+
+.header-wrapper {
+  width: 100%;
+  height: 150px;
+  position: relative;
+}
+
+.header-bg {
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+}
+
+.type-switch-wrap {
+  position: absolute;
+  top: 70px;
+  left: 12px;
+  right: 12px;
+  z-index: 3;
+  border-radius: 9px;
+  height: 40px;
+  padding: 4px;
+  overflow: hidden;
+}
+
+.type-switch-wrap .blur-layer {
+  border-radius: 9px;
+  position: absolute;
+  top: -5px; bottom: -5px; left: -5px; right: -5px;
+  filter: blur(5px);
+  background-color: rgba(255,255,255,0.7);
+}
+
+.type-switch-wrap .frost-overlay {
+  border-radius: 9px;
+  position: absolute;
+  top: 0; bottom: 0; left: 0; right: 0;
+  background-color: rgba(255, 255, 255, 0.4);
+}
+
+.type-switch {
+  width: 100%;
+  flex-direction: row;
+  height: 32px;
+  align-items: center;
+  border: 1px solid rgba(255,255,255,0.7);
+  background-color: transparent;
+  border-radius: 6px;
+  position: relative;
+  z-index: 4;
+}
+
+.type-item {
+  flex: 1;
+  height: 100%;
+  border-radius: 6px;
+  justify-content: center;
+  align-items: center;
+}
+
+.type-item-expense-active {
+  background-color: #f8538f;
+}
+
+.type-item-income-active {
+  background-color: #2dcac8;
+}
+
+.type-text {
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.type-text-active {
+  color: #ffffff;
+}
+
+.type-text-inactive {
+  color: #7f4b22;
+}
+
+.category-container {
+  margin-top: -45px;
+  padding-left: 10px;
+  padding-right: 10px;
+  padding-top: 8px;
+  padding-bottom: 10px;
+  height: 240px;
+  position: relative;
+  z-index: 2;
+  box-sizing: border-box;
+}
+
+.category-stack {
+  width: 100%;
+  border-radius: 7px;
+  height: 100%;
+  overflow: hidden;
+  flex-direction: column;
+  position: relative;
+}
+
+.blur-layer-stack {
+  position: absolute;
+  top: -12px;
+  left: -12px;
+  right: -12px;
+  bottom: -12px;
+  filter: blur(7px);
+}
+
+.frost-overlay-stack {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.75),
+    rgba(255, 255, 255, 0.9),
+    #ffffff
+  );
+}
+
+.category-swiper {
+  width: 100%;
+  height: 100%;
+  indicator-color: rgba(0, 0, 0, 0.2);
+  indicator-size: 8px;
+  indicator-bottom: 42px;
+}
+
+.swiper-expense {
+  indicator-selected-color: #f8538f;
+}
+
+.swiper-income {
+  indicator-selected-color: #2dcac8;
+}
+
+.category-page {
+  width: 100%;
+  height: 100%;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-content: flex-start;
+  padding-top: 10px;
+  padding-left: 5px;
+  padding-right: 5px;
+  box-sizing: border-box;
+}
+
+.category-item {
+  width: 20%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  margin-bottom: 5px;
+  flex-shrink: 0;
+}
+
+.icon-circle {
+  width: 32px;
+  height: 32px;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 2px;
+  border-radius: 16px;
+  border-width: 1px;
+  border-color: transparent;
+}
+
+.selected-icon-bg {
+  border-color: #111111;
+}
+
+.category-icon {
+  width: 100%;
+  height: 100%;
+  resize-mode: contain;
+  border-radius: 16px;
+}
+
+.category-name {
+  font-size: 10px;
+  color: #333333;
+  text-align: center;
+  width: 100%;
+  lines: 1;
+}
+
+.selected-text {
+  color: #111111;
+  font-weight: bold;
+}
+
+.bottom-panel {
+  flex-direction: column;
+  background-color: #ffffff;
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+  padding-top: 15px;
+  padding-bottom: 50px;
+  margin-top: -50px;
+  elevation: 10px;
+  position: relative;
+  z-index: 10;
+  width: 100%;
+}
+
+.input-row {
+  flex-direction: row;
+  align-items: center;
+  padding: 12px 15px;
+  border-bottom-width: 1px;
+  border-bottom-color: #f0f0f0;
+  height: 40px;
+}
+
+.note-input-wrapper {
+  flex: 1;
+  border-left-width: 3px;
+  border-left-color: #ccff00;
+  padding-left: 6px;
+  justify-content: center;
+  height: 100%;
+}
+
+.note-input {
+  font-size: 12px;
+  width: 100%;
+  height: 100%;
+}
+
+.amount-wrapper {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  width: 120px;
+}
+
+.currency-symbol {
+  font-size: 14px;
+  color: #000000;
+  font-weight: bold;
+  margin-right: 2px;
+}
+
+.amount-text {
+  font-size: 16px;
+  color: #000000;
+  font-weight: bold;
+}
+
+.keyboard {
+  flex-direction: column;
+  padding: 4px;
+  background-color: #f7f8fa;
+  width: 100%;
+}
+
+.key-row {
+  flex-direction: row;
+  margin-bottom: 4px;
+}
+
+.key-cell {
+  flex: 1;
+  height: 34px;
+  background-color: #ffffff;
+  border-radius: 4px;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  margin-left: 2px;
+  margin-right: 2px;
+  box-shadow: 0px 1px 2px rgba(0, 0, 0, 0.05);
+  width: 0;
+}
+
+.key-num {
+  font-size: 13px;
+  color: #000000;
+  font-weight: bold;
+}
+
+.key-sub {
+  font-size: 6px;
+  color: #999999;
+  margin-top: -1px;
+}
+
+.key-del {
+  font-size: 12px;
+  color: #666666;
+}
+
+.key-del-icon {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+}
+
+.footer-row {
+  margin-top: 2px;
+  margin-bottom: 8px;
+}
+
+.date-wrapper {
+  width: 25%;
+  height: 34px;
+  margin-left: 2px;
+  margin-right: 2px;
+  position: relative;
+}
+
+.date-view {
+  width: 100%;
+  height: 100%;
+  background-color: #ffffff;
+  border-radius: 4px;
+  justify-content: center;
+  align-items: center;
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.date-picker-overlay {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  opacity: 0;
+}
+
+.date-text {
+  font-size: 9px;
+  color: #333333;
+}
+
+.submit-btn {
+  flex: 1;
+  height: 34px;
+  background-color: #2dcac8;
+  border-radius: 4px;
+  justify-content: center;
+  align-items: center;
+  margin-left: 2px;
+  margin-right: 2px;
+}
+
+.submit-text {
+  font-size: 11px;
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.bottom-spacer {
+  height: 40px;
+  background-color: transparent;
+}
+</style>
