@@ -55,8 +55,10 @@
                 <div class="card-col-new line-left" onclick="showBudgetPopup">
                   <text class="sub-label-new {{isOverBudget ? 'over-budget-label' : ''}}">{{monthBudget ? (isOverBudget ? '已超支' : '剩余预算') : '本月预算'}}</text>
                   <div class="budget-wrap-new">
-                    <text class="sub-amount-budget {{isOverBudget ? 'over-budget-amount' : ''}}">{{monthBudget ? (isOverBudget ? '¥' + overBudgetAmount : '¥' + remainingBudget) : '未设置'}}</text>
-                    <image class="edit-icon" src="../../assets/img/jilu.png"></image>
+                    <div class="budget-value-row">
+                      <text class="sub-amount-budget {{isOverBudget ? 'over-budget-amount' : ''}}">{{monthBudget ? (isOverBudget ? '¥' + overBudgetAmount : '¥' + remainingBudget) : '未设置'}}</text>
+                      <image class="edit-icon" src="../../assets/img/jilu.png"></image>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -758,6 +760,11 @@ export default {
   align-items: flex-start;
 }
 
+.budget-value-row {
+  flex-direction: row;
+  align-items: center;
+}
+
 .sub-amount-budget {
   font-size: 9px;
   font-weight: bold;
@@ -771,13 +778,14 @@ export default {
 
 .over-budget-amount {
   color: #ff3b30;
+  font-size: 11px;
 }
 
 .edit-icon {
   width: 10px;
   height: 10px;
   object-fit: contain;
-  margin-top: 2px;
+  margin-left: 4px;
 }
 
 .list-wrapper {
