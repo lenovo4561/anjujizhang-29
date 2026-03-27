@@ -39,8 +39,7 @@
                 onchange="onMonthChange"
               ></picker>
               <div class="amount-row-new">
-                <text class="amount-large-new {{isOverBudget ? 'red-text' : ''}}">¥{{monthBalance}}</text>
-                <text class="over-budget-tag" if="{{isOverBudget}}">已超支</text>
+                <text class="amount-large-new">¥{{monthBalance}}</text>
               </div>
               
               <div class="card-row-three">
@@ -123,7 +122,7 @@
         <text class="budget-popup-label">本月计划预算</text>
         <div class="budget-input-wrapper">
           <text class="currency-symbol">¥</text>
-          <input class="budget-input" type="number" placeholder="请输入本月预算" value="{{tempBudget}}" onchange="onBudgetChange" />
+          <input class="budget-input" type="number" placeholder="请输入本月预算" value="{{tempBudget}}" oninput="onBudgetInput" onchange="onBudgetChange" />
         </div>
         <div class="budget-popup-btns">
           <text class="budget-btn-cancel" onclick="hideBudgetPopup">取消</text>
@@ -371,9 +370,7 @@ export default {
   },
   updateBudgetStatus() {
     const budgetRaw = this.monthBudget ? Number(String(this.monthBudget).replace(/,/g, '')) : NaN
-    const totalIncomeRaw = parseFloat(String(this.monthIncome).replace(/,/g, '')) || 0
     const totalExpenseRaw = parseFloat(String(this.monthExpense).replace(/,/g, '')) || 0
-    const netExpenseRaw = Math.max(totalExpenseRaw - totalIncomeRaw, 0)
 
     if (isNaN(budgetRaw)) {
       this.remainingBudget = '0.00'
@@ -383,8 +380,8 @@ export default {
     }
 
     this.remainingBudget = this.formatNumberWithComma(budgetRaw - totalExpenseRaw)
-    this.isOverBudget = netExpenseRaw > budgetRaw
-    this.overBudgetAmount = this.isOverBudget ? this.formatNumberWithComma(netExpenseRaw - budgetRaw) : '0.00'
+    this.isOverBudget = totalExpenseRaw > budgetRaw
+    this.overBudgetAmount = this.isOverBudget ? this.formatNumberWithComma(totalExpenseRaw - budgetRaw) : '0.00'
   },
   toDetail(item) {
     const detailData = item.originalData || item
@@ -427,17 +424,40 @@ export default {
   hideBudgetPopup() {
     this.isBudgetPopupVisible = false
   },
+  getInputValue(e) {
+    if (!e) return ''
+    if (e.value !== undefined && e.value !== null) return String(e.value)
+    if (e.newValue !== undefined && e.newValue !== null) return String(e.newValue)
+    if (e.target && e.target.attr && e.target.attr.value !== undefined && e.target.attr.value !== null) {
+      return String(e.target.attr.value)
+    }
+    return ''
+  },
+  onBudgetInput(e) {
+    this.tempBudget = this.getInputValue(e)
+  },
   onBudgetChange(e) {
-    this.tempBudget = e.value
+    this.tempBudget = this.getInputValue(e)
+  },
+  normalizeBudgetValue(value) {
+    return value === undefined || value === null ? '' : String(value).trim()
   },
   saveBudget() {
-    if (this.tempBudget && parseFloat(this.tempBudget) >= 0) {
+    const normalizedBudget = this.normalizeBudgetValue(this.tempBudget)
+    const numericBudget = Number(normalizedBudget)
+
+    if (normalizedBudget !== '' && !isNaN(numericBudget) && numericBudget >= 0) {
       storage.set({
         key: `budget_${this.currentYear}_${this.currentMonth}`,
-        value: this.tempBudget,
+        value: normalizedBudget,
         success: () => {
-          this.isBudgetPopupVisible = false
           this.loadBudget()
+        },
+        fail: err => {
+          console.error('保存预算失败', err)
+        },
+        complete: () => {
+          this.isBudgetPopupVisible = false
         }
       })
     } else {
@@ -445,8 +465,13 @@ export default {
       storage.delete({
         key: `budget_${this.currentYear}_${this.currentMonth}`,
         success: () => {
-          this.isBudgetPopupVisible = false
           this.loadBudget()
+        },
+        fail: err => {
+          console.error('清除预算失败', err)
+        },
+        complete: () => {
+          this.isBudgetPopupVisible = false
         }
       })
     }
@@ -704,19 +729,6 @@ export default {
   color: #333333;
 }
 
-.red-text {
-  color: #ff3b30;
-}
-
-.over-budget-tag {
-  font-size: 8px;
-  color: #ff3b30;
-  background-color: #ffeceb;
-  padding: 2px 6px;
-  border-radius: 3px;
-  margin-left: 6px;
-}
-
 .card-row-three {
   width: 100%;
   flex-direction: row;
@@ -763,6 +775,9 @@ export default {
 .budget-value-row {
   flex-direction: row;
   align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  flex-wrap: nowrap;
 }
 
 .sub-amount-budget {
@@ -770,6 +785,9 @@ export default {
   font-weight: bold;
   color: #999999;
   margin-right: 4px;
+  max-lines: 1;
+  text-overflow: clip;
+  flex-shrink: 1;
 }
 
 .over-budget-label {
@@ -786,6 +804,8 @@ export default {
   height: 10px;
   object-fit: contain;
   margin-left: 4px;
+  flex-shrink: 0;
+  align-self: center;
 }
 
 .list-wrapper {
