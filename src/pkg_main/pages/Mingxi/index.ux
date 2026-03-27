@@ -53,9 +53,9 @@
                   <text class="sub-amount-expense">¥{{monthExpense}}</text>
                 </div>
                 <div class="card-col-new line-left" onclick="showBudgetPopup">
-                  <text class="sub-label-new">本月预算</text>
+                  <text class="sub-label-new {{isOverBudget ? 'over-budget-label' : ''}}">{{monthBudget ? (isOverBudget ? '已超支' : '剩余预算') : '本月预算'}}</text>
                   <div class="budget-wrap-new">
-                    <text class="sub-amount-budget">{{monthBudget ? '¥' + monthBudget : '未设置'}}</text>
+                    <text class="sub-amount-budget {{isOverBudget ? 'over-budget-amount' : ''}}">{{monthBudget ? (isOverBudget ? '¥' + overBudgetAmount : '¥' + remainingBudget) : '未设置'}}</text>
                     <image class="edit-icon" src="../../assets/img/jilu.png"></image>
                   </div>
                 </div>
@@ -93,7 +93,6 @@
                 </div>
                 <div class="bill-row-bottom">
                   <text class="bill-time">{{item.time}}</text>
-                  <text class="bill-balance" if="{{item.balance !== undefined}}">余额: {{item.balance}}</text>
                 </div>
               </div>
             </div>
@@ -154,6 +153,8 @@ export default {
     monthBalance: '0.00',
     isOverBudget: false,
     monthBudget: '',
+    remainingBudget: '0.00',
+    overBudgetAmount: '0.00',
     isBudgetPopupVisible: false,
     tempBudget: ''
   },
@@ -190,21 +191,10 @@ export default {
         const value = data && data.data !== undefined ? data.data : data
         if (value) {
           this.monthBudget = this.formatNumberWithComma(value)
-          
-          // Re-evaluate over budget based on set budget instead of negative balance
-          const totalExpenseRaw = parseFloat(this.monthExpense.replace(/,/g, '')) || 0;
-          this.isOverBudget = totalExpenseRaw > parseFloat(value);
         } else {
           this.monthBudget = ''
-          
-          // Recalculate default over-budget logic
-          const income = parseFloat(this.monthIncome.replace(/,/g, '')) || 0;
-          const expense = parseFloat(this.monthExpense.replace(/,/g, '')) || 0;
-          this.isOverBudget = (income - expense) < 0
         }
-
-        this.applyBudgetRunningBalance()
-        this.refreshBillListBalance()
+        this.updateBudgetStatus()
       }
     })
   },
@@ -241,7 +231,6 @@ export default {
 
         const monthAllRecords = allRecords.filter(r => r.dateStr && r.dateStr.startsWith(yearMonthPrefix))
         this.monthAllRecords = monthAllRecords
-        this.applyBudgetRunningBalance()
 
         let monthRecords = monthAllRecords
 
@@ -265,7 +254,7 @@ export default {
         this.monthIncome = this.formatNumberWithComma(totalIncome)
         this.monthExpense = this.formatNumberWithComma(totalExpense)
         this.monthBalance = this.formatNumberWithComma(totalIncome - totalExpense)
-        this.isOverBudget = (totalIncome - totalExpense) < 0
+        this.updateBudgetStatus()
 
         const groupMap = {}
 
@@ -315,7 +304,6 @@ export default {
                 icon: item.categoryIcon || '../../assets/img/qita.png',
                 category: item.category || '其他',
                 amount: item.type === 'income' ? '+¥' + this.formatNumberWithComma(item.amount) : '-¥' + this.formatNumberWithComma(item.amount),
-                balance: this.formatNumberWithComma(this.getDetailItemBalance(item)),
                 time: this.formatTime(item.date),
                 type: item.type,
                 originalData: item
@@ -379,64 +367,22 @@ export default {
     }
     return 0
   },
-  applyBudgetRunningBalance() {
-    if (!this.monthAllRecords || !this.monthAllRecords.length) {
-      return
-    }
-
+  updateBudgetStatus() {
     const budgetRaw = this.monthBudget ? Number(String(this.monthBudget).replace(/,/g, '')) : NaN
+    const totalIncomeRaw = parseFloat(String(this.monthIncome).replace(/,/g, '')) || 0
+    const totalExpenseRaw = parseFloat(String(this.monthExpense).replace(/,/g, '')) || 0
+    const netExpenseRaw = Math.max(totalExpenseRaw - totalIncomeRaw, 0)
+
     if (isNaN(budgetRaw)) {
-      this.monthAllRecords.forEach(record => {
-        if (record && record.budgetRunningBalance !== undefined) {
-          delete record.budgetRunningBalance
-        }
-      })
+      this.remainingBudget = '0.00'
+      this.overBudgetAmount = '0.00'
+      this.isOverBudget = false
       return
     }
 
-    const recordsSortedAsc = [...this.monthAllRecords].sort((a, b) => this.getRecordTimestamp(a) - this.getRecordTimestamp(b))
-    let runningBudgetBalance = budgetRaw
-    recordsSortedAsc.forEach(record => {
-      const amount = Number(record && record.amount) || 0
-      if (record && record.type === 'expense') {
-        runningBudgetBalance -= amount
-      }
-      if (record) {
-        record.budgetRunningBalance = runningBudgetBalance
-      }
-    })
-  },
-  getDetailItemBalance(item) {
-    const budgetRaw = this.monthBudget ? Number(String(this.monthBudget).replace(/,/g, '')) : NaN
-    if (!isNaN(budgetRaw)) {
-      const runningValue = Number(item && item.budgetRunningBalance)
-      if (!isNaN(runningValue)) {
-        return runningValue
-      }
-
-      const expenseAmount = item && item.type === 'expense' ? (Number(item.amount) || 0) : 0
-      return budgetRaw - expenseAmount
-    }
-
-    const hasRawBalance = item && item.balance !== undefined && item.balance !== null && item.balance !== ''
-    const rawValue = hasRawBalance ? Number(item.balance) : Number(item && item.calculatedBalance)
-    return isNaN(rawValue) ? 0 : rawValue
-  },
-  refreshBillListBalance() {
-    if (!this.billList || !this.billList.length) {
-      return
-    }
-
-    this.billList = this.billList.map(group => ({
-      ...group,
-      items: (group.items || []).map(listItem => {
-        const sourceItem = listItem.originalData || listItem
-        return {
-          ...listItem,
-          balance: this.formatNumberWithComma(this.getDetailItemBalance(sourceItem))
-        }
-      })
-    }))
+    this.remainingBudget = this.formatNumberWithComma(budgetRaw - totalExpenseRaw)
+    this.isOverBudget = netExpenseRaw > budgetRaw
+    this.overBudgetAmount = this.isOverBudget ? this.formatNumberWithComma(netExpenseRaw - budgetRaw) : '0.00'
   },
   toDetail(item) {
     const detailData = item.originalData || item
@@ -808,8 +754,8 @@ export default {
 }
 
 .budget-wrap-new {
-  flex-direction: row;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 .sub-amount-budget {
@@ -819,10 +765,19 @@ export default {
   margin-right: 4px;
 }
 
+.over-budget-label {
+  color: #ff3b30;
+}
+
+.over-budget-amount {
+  color: #ff3b30;
+}
+
 .edit-icon {
   width: 10px;
   height: 10px;
   object-fit: contain;
+  margin-top: 2px;
 }
 
 .list-wrapper {
