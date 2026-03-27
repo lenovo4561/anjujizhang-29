@@ -148,6 +148,7 @@ export default {
     showAmount: false,
     filterType: 'all',
     billList: [],
+    monthAllRecords: [],
     monthIncome: '0.00',
     monthExpense: '0.00',
     monthBalance: '0.00',
@@ -201,6 +202,9 @@ export default {
           const expense = parseFloat(this.monthExpense.replace(/,/g, '')) || 0;
           this.isOverBudget = (income - expense) < 0
         }
+
+        this.applyBudgetRunningBalance()
+        this.refreshBillListBalance()
       }
     })
   },
@@ -220,28 +224,7 @@ export default {
 
         // Build running balance from all records in chronological order,
         // so each month's detail item shows a consistent account balance.
-        const getRecordTimestamp = (record) => {
-          if (!record) return 0
-          if (record.date !== undefined && record.date !== null && record.date !== '') {
-            const numericTs = Number(record.date)
-            if (!isNaN(numericTs) && numericTs > 0) {
-              return numericTs
-            }
-            const parsedTs = new Date(record.date).getTime()
-            if (!isNaN(parsedTs)) {
-              return parsedTs
-            }
-          }
-          if (record.dateStr) {
-            const fallbackTs = new Date(record.dateStr + ' 00:00:00').getTime()
-            if (!isNaN(fallbackTs)) {
-              return fallbackTs
-            }
-          }
-          return 0
-        }
-
-        const allRecordsSortedAsc = [...allRecords].sort((a, b) => getRecordTimestamp(a) - getRecordTimestamp(b))
+        const allRecordsSortedAsc = [...allRecords].sort((a, b) => this.getRecordTimestamp(a) - this.getRecordTimestamp(b))
         let runningBalance = 0
         allRecordsSortedAsc.forEach(r => {
           const amount = Number(r.amount) || 0
@@ -256,7 +239,11 @@ export default {
         const monthStr = this.currentMonth < 10 ? '0' + this.currentMonth : '' + this.currentMonth
         const yearMonthPrefix = `${this.currentYear}-${monthStr}`
 
-        let monthRecords = allRecords.filter(r => r.dateStr && r.dateStr.startsWith(yearMonthPrefix))
+        const monthAllRecords = allRecords.filter(r => r.dateStr && r.dateStr.startsWith(yearMonthPrefix))
+        this.monthAllRecords = monthAllRecords
+        this.applyBudgetRunningBalance()
+
+        let monthRecords = monthAllRecords
 
         if (this.filterType === 'expense') {
           monthRecords = monthRecords.filter(r => r.type === 'expense')
@@ -266,7 +253,7 @@ export default {
 
         let totalIncome = 0
         let totalExpense = 0
-        allRecords.filter(r => r.dateStr && r.dateStr.startsWith(yearMonthPrefix)).forEach(r => {
+        monthAllRecords.forEach(r => {
           const amount = Number(r.amount) || 0
           if (r.type === 'income') {
             totalIncome += amount
@@ -328,11 +315,7 @@ export default {
                 icon: item.categoryIcon || '../../assets/img/qita.png',
                 category: item.category || '其他',
                 amount: item.type === 'income' ? '+¥' + this.formatNumberWithComma(item.amount) : '-¥' + this.formatNumberWithComma(item.amount),
-                balance: this.formatNumberWithComma((() => {
-                  const hasRawBalance = item.balance !== undefined && item.balance !== null && item.balance !== ''
-                  const rawValue = hasRawBalance ? Number(item.balance) : Number(item.calculatedBalance)
-                  return isNaN(rawValue) ? 0 : rawValue
-                })()),
+                balance: this.formatNumberWithComma(this.getDetailItemBalance(item)),
                 time: this.formatTime(item.date),
                 type: item.type,
                 originalData: item
@@ -344,6 +327,7 @@ export default {
       },
       fail: () => {
         this.billList = []
+        this.monthAllRecords = []
         this.monthIncome = '0.00'
         this.monthExpense = '0.00'
         this.monthBalance = '0.00'
@@ -374,6 +358,85 @@ export default {
     const parts = Number(numStr).toFixed(2).split('.')
     parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',')
     return parts.join('.')
+  },
+  getRecordTimestamp(record) {
+    if (!record) return 0
+    if (record.date !== undefined && record.date !== null && record.date !== '') {
+      const numericTs = Number(record.date)
+      if (!isNaN(numericTs) && numericTs > 0) {
+        return numericTs
+      }
+      const parsedTs = new Date(record.date).getTime()
+      if (!isNaN(parsedTs)) {
+        return parsedTs
+      }
+    }
+    if (record.dateStr) {
+      const fallbackTs = new Date(record.dateStr + ' 00:00:00').getTime()
+      if (!isNaN(fallbackTs)) {
+        return fallbackTs
+      }
+    }
+    return 0
+  },
+  applyBudgetRunningBalance() {
+    if (!this.monthAllRecords || !this.monthAllRecords.length) {
+      return
+    }
+
+    const budgetRaw = this.monthBudget ? Number(String(this.monthBudget).replace(/,/g, '')) : NaN
+    if (isNaN(budgetRaw)) {
+      this.monthAllRecords.forEach(record => {
+        if (record && record.budgetRunningBalance !== undefined) {
+          delete record.budgetRunningBalance
+        }
+      })
+      return
+    }
+
+    const recordsSortedAsc = [...this.monthAllRecords].sort((a, b) => this.getRecordTimestamp(a) - this.getRecordTimestamp(b))
+    let runningBudgetBalance = budgetRaw
+    recordsSortedAsc.forEach(record => {
+      const amount = Number(record && record.amount) || 0
+      if (record && record.type === 'expense') {
+        runningBudgetBalance -= amount
+      }
+      if (record) {
+        record.budgetRunningBalance = runningBudgetBalance
+      }
+    })
+  },
+  getDetailItemBalance(item) {
+    const budgetRaw = this.monthBudget ? Number(String(this.monthBudget).replace(/,/g, '')) : NaN
+    if (!isNaN(budgetRaw)) {
+      const runningValue = Number(item && item.budgetRunningBalance)
+      if (!isNaN(runningValue)) {
+        return runningValue
+      }
+
+      const expenseAmount = item && item.type === 'expense' ? (Number(item.amount) || 0) : 0
+      return budgetRaw - expenseAmount
+    }
+
+    const hasRawBalance = item && item.balance !== undefined && item.balance !== null && item.balance !== ''
+    const rawValue = hasRawBalance ? Number(item.balance) : Number(item && item.calculatedBalance)
+    return isNaN(rawValue) ? 0 : rawValue
+  },
+  refreshBillListBalance() {
+    if (!this.billList || !this.billList.length) {
+      return
+    }
+
+    this.billList = this.billList.map(group => ({
+      ...group,
+      items: (group.items || []).map(listItem => {
+        const sourceItem = listItem.originalData || listItem
+        return {
+          ...listItem,
+          balance: this.formatNumberWithComma(this.getDetailItemBalance(sourceItem))
+        }
+      })
+    }))
   },
   toDetail(item) {
     const detailData = item.originalData || item
